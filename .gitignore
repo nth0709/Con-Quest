@@ -16,3 +16,4 @@ __pycache__/
 .tmp_pyc/
 tmp_*.log
 backend/tmp_*.log
+backend/*.db-journal
