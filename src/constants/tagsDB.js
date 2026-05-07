@@ -1,0 +1,230 @@
+// src/constants/tagsDB.js
+
+// 1. 관심 카테고리 (공모전/프로젝트 성격)
+export const INTEREST_CATEGORIES = [
+  '기획/아이디어',
+  '디자인/UIUX',
+  '개발/IT/SW',
+  '마케팅/광고/홍보',
+  '영상/사진/음향',
+  '데이터/AI/분석',
+  '창업/비즈니스',
+  '문학/글쓰기/시나리오',
+  '건축/공간/인테리어',
+  '예술/문화/음악',
+  '게임/메타버스',
+  '사회/환경/ESG',
+  '학술/논문/연구',
+  '해외탐방/봉사',
+  '금융/경제/투자',
+  // 추가된 카테고리
+  '서포터즈/블로그기자단',
+  '언론/미디어/방송',
+  '스포츠/체육/건강',
+  '공공/정책/국민참여',
+  '뷰티/패션/라이프스타일',
+  '어학/외국어/번역',
+]
+
+// 2. 희망 직무 분야 (대충 쳐도 걸리게 동의어/연관어 포함 구조)
+export const JOB_FIELDS = [
+  // IT/개발
+  { name: '프론트엔드 개발', keywords: ['웹개발', 'frontend', 'react', '퍼블리셔', 'ui개발'] },
+  { name: '백엔드 개발', keywords: ['서버', 'backend', 'java', 'spring', 'api', 'db'] },
+  { name: '풀스택 개발', keywords: ['fullstack', '웹개발'] },
+  { name: '모바일 앱 개발', keywords: ['ios', 'android', '안드로이드', '플러터', 'flutter', '앱개발'] },
+
+  // 데이터/AI
+  { name: '데이터 분석가 (DA)', keywords: ['데이터', '애널리스트', 'data', '통계', 'sql'] },
+  { name: '데이터 사이언티스트 (DS)', keywords: ['머신러닝', '딥러닝', 'ai', '인공지능', '모델링'] },
+
+  // 기획/디자인
+  { name: '서비스 기획 (PM/PO)', keywords: ['기획자', '프로덕트매니저', '프로젝트매니저', '운영'] },
+  { name: 'UI/UX 디자인', keywords: ['웹디자인', '앱디자인', '프로덕트디자인', 'gui'] },
+  { name: '그래픽 디자인', keywords: ['시각디자인', '패키지디자인', '브랜딩', '로고', '포스터'] },
+  { name: '영상/모션 디자인', keywords: ['영상편집', '유튜브', '모션그래픽', '3d', '애니메이션'] },
+
+  // 마케팅/비즈니스/경영지원
+  { name: '콘텐츠 마케팅', keywords: ['sns', '블로그', '인스타그램', '에디터', '글쓰기'] },
+  { name: '퍼포먼스 마케팅', keywords: ['광고', '매체', 'ga', 'roas', '데이터마케팅'] },
+  { name: '브랜드 마케터', keywords: ['브랜딩', 'pr', '홍보', '캠페인'] },
+  { name: '영업/B2B/기술영업', keywords: ['세일즈', '영업기획', '고객관리'] },
+  { name: '경영/전략/사업기획', keywords: ['신사업', '경영지원', '컨설팅'] },
+  { name: 'HR/인사/교육', keywords: ['hrm', 'hrd', '채용', '노무', '조직문화', '인사'] },
+  { name: '재무/회계/세무', keywords: ['cpa', '자금', '재무제표', '세무사', '감사', '회계'] },
+  { name: 'SCM/물류/유통', keywords: ['구매', '무역', '물류관리', '수출입', 'md', '유통'] },
+
+  // 미디어/방송
+  { name: '미디어/방송/언론', keywords: ['pd', '기자', '아나운서', '방송제작', '작가'] },
+
+  // 공학/제조/엔지니어링 (추가됨)
+  { name: '반도체 설계/공정', keywords: ['공정설계', '공정기술', '소자', '회로설계', '반도체', '설비기술', '8대공정'] },
+  { name: '자동차/모빌리티', keywords: ['완성차', '자율주행', '차량설계', '제어기', '전기차', '배터리', '임베디드', '현대차'] },
+  { name: '배터리/이차전지', keywords: ['에너지', '이차전지', '소재', '배터리설계', '화학', '공정'] },
+  { name: '로봇/자동화', keywords: ['로보틱스', '스마트팩토리', '제어공학', '메카트로닉스', '임베디드'] },
+  { name: '바이오/제약/헬스케어', keywords: ['생명공학', '의료기기', '제약', '임상', '분석', '품질관리', '바이오'] },
+  { name: '에너지/플랜트', keywords: ['수소', '원자력', '신재생에너지', '건설', '공사', '발전소'] },
+  { name: '생산관리/품질관리', keywords: ['QC', 'QA', '공정관리', 'scm', '품질보증', '생산기술'] },
+]
+
+// 3. 보유 스킬 (직무 무관하게 쪼갠 세부 역량)
+export const SKILLS = [
+  // 개발 역량
+  'React',
+  'Vue.js',
+  'Next.js',
+  'Node.js',
+  'Spring Boot',
+  'Django',
+  'Flask',
+  'TypeScript',
+  'JavaScript',
+  'Python',
+  'Java',
+  'C++',
+  'C#',
+  'PHP',
+  'REST API',
+  'GraphQL',
+  'Docker',
+  'Kubernetes',
+  'AWS',
+  'CI/CD',
+  'HTML/CSS',
+  'SCSS',
+  'Tailwind',
+  'React Native',
+  'Flutter',
+  'Swift',
+  'Kotlin',
+  'SQL',
+  'NoSQL',
+  'MongoDB',
+  'MySQL',
+  'PostgreSQL',
+  'Oracle',
+
+  // 데이터/AI 역량
+  '머신러닝',
+  '딥러닝',
+  'NLP(자연어처리)',
+  '컴퓨터비전',
+  '데이터 크롤링',
+  '데이터 시각화',
+  '통계 분석',
+  'A/B 테스트',
+  '추천 알고리즘',
+
+  // 디자인/기획 역량
+  'UI 설계',
+  'UX 리서치',
+  '와이어프레임',
+  '프로토타이핑',
+  '스토리보드',
+  '사용자 인터뷰',
+  '서비스 기획서 작성',
+  '페르소나 설정',
+  '디자인 시스템 구축',
+
+  // 마케팅/비즈니스 역량
+  '콘텐츠 제작',
+  '카피라이팅',
+  'SEO 최적화',
+  '퍼포먼스 분석',
+  'SNS 채널 운영',
+  '광고 집행',
+  '시장 조사',
+  '사업 계획서 작성',
+  'IR 피칭',
+  '제안서 작성',
+  'B2B 세일즈',
+  'CS 응대',
+  '고객 여정 설계',
+
+  // 공학/글로벌/소프트스킬 (추가됨)
+  '도면 설계',
+  '회로 설계',
+  '공정 시뮬레이션',
+  '구조 해석',
+  '비즈니스 영어',
+  '다국어 번역',
+  '영어 피칭',
+  '해외 시장 리서치',
+  'Agile/Scrum',
+  '데이터 기반 의사결정',
+  '숏폼 기획',
+  '캐릭터 디자인',
+  '스토리텔링',
+]
+
+// 4. 활용 툴 (디자인, 협업, 개발, 분석)
+export const TOOLS = [
+  // 디자인/영상
+  'Figma',
+  'Sketch',
+  'Zeplin',
+  'Photoshop',
+  'Illustrator',
+  'Premiere Pro',
+  'After Effects',
+  'Indesign',
+  'Blender',
+  'Cinema 4D',
+  'Maya',
+  'Lightroom',
+  'Procreate',
+
+  // 협업/문서/생산성
+  'Notion',
+  'Slack',
+  'Jira',
+  'Trello',
+  'Asana',
+  'Confluence',
+  'Discord',
+  'MS Excel',
+  'MS PowerPoint',
+  'MS Word',
+  'Google Sheets',
+  'Google Slides',
+  'Hangul(한글)',
+
+  // 개발/데이터 분석
+  'VS Code',
+  'IntelliJ',
+  'Eclipse',
+  'GitHub',
+  'GitLab',
+  'Bitbucket',
+  'Postman',
+  'Tableau',
+  'Power BI',
+  'Google Analytics (GA4)',
+  'Amplitude',
+  'Mixpanel',
+  'Looker',
+
+  // 3D/공학/기타/노코드 (추가됨)
+  'AutoCAD',
+  'SolidWorks',
+  'CATIA',
+  'Rhino',
+  'MATLAB',
+  'SPSS',
+  'R',
+  'Jupyter Notebook',
+  'SAS',
+  'Unity',
+  'Unreal Engine',
+  'Zoom',
+  'Webex',
+  'Google Workspace',
+  'Miro',
+  'Mailchimp',
+  'WordPress',
+  'Webflow',
+  'Canva',
+  'Framer',
+  'Zapier',
+  'Bubble',
+]
