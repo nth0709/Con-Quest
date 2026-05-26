@@ -177,3 +177,15 @@ class MyPageResponse(BaseModel):
     scraps_count: int
     completed_quests_count: int
     items: List[ProfileItemOut]
+
+#추가
+class NotificationResponse(BaseModel):
+    id: int
+    user_id: int
+    contest_id: Optional[int] = None
+    title: str
+    message: str
+    is_read: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

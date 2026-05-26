@@ -76,7 +76,48 @@ export function AppDataProvider({ children }) {
   const [posts, setPosts] = useState(loadPostsRaw)
   const [remoteContests, setRemoteContests] = useState(null)
   const [remoteBookmarkCounts, setRemoteBookmarkCounts] = useState(null)
+  
+  // 🔔 [추가] 실시간 알림 상태 저장소
+  const [notifications, setNotifications] = useState([])
+  
   const apiEnabled = hasApiBase()
+
+  // 🔔 [추가] 백엔드로부터 알림 리스트 동기화하는 함수
+  const hydrateNotifications = useCallback(async () => {
+    if (!apiEnabled || !userId) return
+    try {
+      const res = await fetch("http://localhost:8000/api/notifications", {
+        headers: { "X-User-Id": String(userId) },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setNotifications(data)
+      }
+    } catch (err) {
+      console.error("알림 동기화 실패:", err)
+    }
+  }, [apiEnabled, userId])
+
+  // 🔔 [추가] 알림 읽음 처리 API 호출 함수
+  const markNotificationAsRead = useCallback(async (notificationId) => {
+    if (!userId) return
+    
+    // UI에 즉시 반영 (선최적화)
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n))
+    )
+
+    if (!apiEnabled) return
+
+    try {
+      await fetch(`http://localhost:8000/api/notifications/${notificationId}/read`, {
+        method: "PATCH",
+        headers: { "X-User-Id": String(userId) },
+      })
+    } catch (err) {
+      console.error("알림 읽음 처리 요청 실패:", err)
+    }
+  }, [apiEnabled, userId])
 
   useEffect(() => {
     try {
@@ -140,27 +181,28 @@ export function AppDataProvider({ children }) {
     }
   }, [apiEnabled])
 
+  // 기존 라이프사이클 엔진에 알림 주기적 동기화 톱니바퀴 연동
   useEffect(() => {
     let cancelled = false
 
     const run = async () => {
       if (!apiEnabled) return
-      const [contestsOk, postsOk] = await Promise.all([hydrateRemoteContests(), hydrateRemotePosts()])
-      if (cancelled) return
-      if (!contestsOk) {
-        setRemoteContests(null)
-        setRemoteBookmarkCounts(null)
-      }
-      if (!postsOk) {
-        setPosts(loadPostsRaw())
-      }
+      // 공모전, 게시글 로드할 때 알림도 함께 동기화 처리
+      await Promise.all([hydrateRemoteContests(), hydrateRemotePosts(), hydrateNotifications()])
     }
 
     void run()
     return () => {
       cancelled = true
     }
-  }, [apiEnabled, hydrateRemoteContests, hydrateRemotePosts, rev])
+  }, [apiEnabled, hydrateRemoteContests, hydrateRemotePosts, hydrateNotifications, rev])
+
+  // 🔔 [추가] 20초마다 새 알림 정보 체크하는 백그라운드 폴링 타이머 가동
+  useEffect(() => {
+    if (!userId || !apiEnabled) return
+    const interval = setInterval(hydrateNotifications, 20000)
+    return () => clearInterval(interval)
+  }, [hydrateNotifications, userId, apiEnabled])
 
   const contests = useMemo(() => {
     if (remoteContests) return remoteContests
@@ -402,6 +444,9 @@ export function AppDataProvider({ children }) {
       deleteComment,
       getContestById,
       userId,
+      // 🔔 [추가] 하위 알림 종 아이콘에서 가져다 쓸 수 있도록 컨텍스트 배포
+      notifications,
+      markNotificationAsRead,
     }),
     [
       contests,
@@ -416,6 +461,8 @@ export function AppDataProvider({ children }) {
       deleteComment,
       getContestById,
       userId,
+      notifications,
+      markNotificationAsRead,
     ],
   )
 

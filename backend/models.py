@@ -33,6 +33,7 @@ class User(Base):
     quests = relationship("UserQuest", back_populates="user", cascade="all, delete-orphan")
     posts = relationship("CommunityPost", back_populates="user")
     comments = relationship("Comment", back_populates="user")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan") #추가함
 
 
 class Contest(Base):
@@ -137,3 +138,20 @@ class UserProfileItem(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     item_id = Column(Integer, ForeignKey("profile_items.id"), nullable=False)
     is_equipped = Column(Boolean, default=False)
+
+#추가함
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    contest_id = Column(Integer, ForeignKey("contests.id"), nullable=True) 
+    
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # 관계 설정
+    user = relationship("User", back_populates="notifications")
+    contest = relationship("Contest")

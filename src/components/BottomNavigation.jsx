@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import NotificationDropdown from './NotificationDropdown';
 
 const items = [
   { label: '홈', path: '/main', icon: '⌂' },
@@ -18,27 +19,33 @@ export default function BottomNavigation() {
   const location = useLocation()
 
   return (
-    <nav className="absolute bottom-0 left-0 right-0 z-40 border-t border-zinc-200 bg-white/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
-      <div className="grid grid-cols-5 gap-1">
-        {items.map((item) => {
-          const active = isActive(location.pathname, item.path)
-          return (
-            <button
-              key={item.path}
-              type="button"
-              onClick={() => navigate(item.path)}
-              className={`flex min-h-[56px] flex-col items-center justify-center rounded-2xl text-xs font-semibold transition active:scale-[0.98] ${
-                active ? 'bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]' : 'text-zinc-500'
-              }`}
-            >
-              <span className="text-base" aria-hidden>
-                {item.icon}
-              </span>
-              <span className="mt-1">{item.label}</span>
-            </button>
-          )
-        })}
+    <>
+      <div className="absolute bottom-[80px] right-4 z-50 bg-white shadow-lg rounded-full border border-zinc-100 p-1 flex items-center justify-center active:scale-95 transition-transform">
+        <NotificationDropdown />
       </div>
-    </nav>
+
+      <nav className="absolute bottom-0 left-0 right-0 z-40 border-t border-zinc-200 bg-white/95 px-2 pb-[max(10px,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
+        <div className="grid grid-cols-5 gap-1">
+          {items.map((item) => {
+            const active = isActive(location.pathname, item.path)
+            return (
+              <button
+                key={item.path}
+                type="button"
+                onClick={() => navigate(item.path)}
+                className={`flex min-h-[56px] flex-col items-center justify-center rounded-2xl text-xs font-semibold transition active:scale-[0.98] ${
+                  active ? 'bg-[var(--brand-blue)]/10 text-[var(--brand-blue)]' : 'text-zinc-500'
+                }`}
+              >
+                <span className="text-base" aria-hidden>
+                  {item.icon}
+                </span>
+                <span className="mt-1">{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      </nav>
+    </>
   )
 }

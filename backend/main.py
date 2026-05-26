@@ -16,8 +16,10 @@ from crawler.linkareer import fetch_contests as fetch_linkareer
 from crawler.thinkgood import fetch_contests as fetch_thinkgood
 from crawler.webity import fetch_contests as fetch_webity
 from database import Base, SessionLocal, engine, get_db
-from models import Comment, CommunityPost, Contest, ProfileItem, Quest, Scrap, User, UserProfileItem, UserQuest
+#models 뒤에 Notification 추가
+from models import Comment, CommunityPost, Contest, ProfileItem, Quest, Scrap, User, UserProfileItem, UserQuest, Notification 
 from recommender import calculate_recommendation
+#schemas에 NotificationResponse 추가
 from schemas import (
     AuthResponse,
     CalendarEvent,
@@ -40,6 +42,7 @@ from schemas import (
     UserLogin,
     UserOut,
     UserRegister,
+    NotificationResponse,
 )
 
 
@@ -455,6 +458,77 @@ def get_contests(
     x_user_id: Optional[str] = Header(default=None),
 ) -> ContestSearchResponse:
     ensure_contests_exist(db)
+
+    # ----------------------------------------------------
+    # 🔔 [수정] 프론트에서 넘어온 유저 ID 기반 무조건 알림 생성
+    # ----------------------------------------------------
+    if x_user_id and x_user_id.isdigit():
+        current_user_id = int(x_user_id)
+        
+        # 1. 프론트엔드 JSON에서 가져온 첫 번째 공모전 데이터를 DB에서 조회합니다.
+        first_contest = db.query(Contest).first()
+        
+        if first_contest:
+            # 2. 중복으로 알림이 수백 개 쌓이는 걸 막기 위해 딱 1번만 발송 검사
+            already_notified = db.query(Notification).filter(
+                Notification.user_id == current_user_id,
+                Notification.title.contains("전공 맞춤 공모전")
+            ).first()
+            
+            # 3. 이 유저에게 보낸 맞춤 알림이 없다면 무조건 쏴줍니다!
+            if not already_notified:
+                new_alert = Notification(
+                    user_id=current_user_id,
+                    title="🎯 내 전공 맞춤 공모전 발견!",
+                    message=f"회원님의 전공 분야와 일치하는 새로운 공모전이 등록되었습니다:\n'{first_contest.title}'",
+                    is_read=False
+                )
+                db.add(new_alert)
+                db.commit() # 백엔드 DB에 알림 수하물 적재 완료!
+    # ----------------------------------------------------
+
+    #추가
+    if x_user_id and x_user_id.isdigit():
+        current_user_id = int(x_user_id)
+        current_user = db.query(User).filter(User.id == current_user_id).first()
+        
+        # 유저가 존재하고, 유저 정보에 전공(major) 정보가 설정되어 있다면
+        if current_user and getattr(current_user, 'major', None):
+            user_major = current_user.major
+            
+            # 최근 3일 이내에 등록된 공모전 중, 유저의 전공 단어가 카테고리(category)에 포함된 공모전 찾기
+            # (중복 알림 방지를 위해 이미 해당 유저에게 발송된 알림이 없는 공모전만 골라냅니다)
+            three_days_ago = date.today() - timedelta(days=3)
+            
+            new_matching_contests = (
+                db.query(Contest)
+                .filter(
+                    Contest.category.contains(user_major),
+                    Contest.created_at >= three_days_ago  # Contest 모델에 생성일(created_at)이 있다고 가정
+                )
+                .all()
+            )
+            
+            for contest in new_matching_contests:
+                # 이미 이 공모전으로 알림을 보낸 적이 있는지 DB 체크
+                already_notified = db.query(Notification).filter(
+                    Notification.user_id == current_user.id,
+                    Notification.title.contains(contest.title[:10]) # 제목 일부 매칭으로 중복 차단
+                ).first()
+                
+                # 보낸 적이 없다면 새로운 맞춤 알림을 생성해서 쏩니다!
+                if not already_notified:
+                    new_alert = Notification(
+                        user_id=current_user.id,
+                        title="🎯 내 전공 맞춤 공모전 발견!",
+                        message=f"내 전공 [{user_major}] 분야의 새로운 공모전 소식입니다:\n'{contest.title}'\n지금 확인하고 스크랩해보세요!",
+                        is_read=False
+                    )
+                    db.add(new_alert)
+            
+            db.commit() # 생성된 모든 전공 맞춤 알림을 디비에 반영
+    # ----------------------------------------------------
+
     query = db.query(Contest)
     if source and source != "전체":
         query = query.filter(Contest.source_site == source)
@@ -624,15 +698,29 @@ def _build_recommendation_response(
         for item in results
     ]
 
-
 @app.post("/recommendations", response_model=list[RecommendationItem])
 def get_recommendations(
     payload: RecommendationRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[RecommendationItem]:
-    return _build_recommendation_response(payload, current_user, db)
+    recommendations = _build_recommendation_response(payload, current_user, db)
 
+
+    if recommendations:
+        first_recommend = recommendations[0]
+        
+        new_alert = Notification(
+            user_id=current_user.id,
+            title="✦ AI 맞춤 추천 공모전 업데이트!",
+            message=f"회원님을 위한 최신 추천 공모전이 도착했습니다:\n'{first_recommend.title}'",
+            is_read=False
+        )
+        db.add(new_alert)
+        db.commit()
+        print(" Breaking News: 새 추천 알림이 DB에 강제로 추가되었습니다!")
+
+    return recommendations
 
 @app.post("/recommend", response_model=list[RecommendationItem])
 def recommend_alias(
@@ -640,8 +728,7 @@ def recommend_alias(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[RecommendationItem]:
-    return _build_recommendation_response(payload, current_user, db)
-
+    return get_recommendations(payload, current_user, db)
 
 @app.get("/quests", response_model=list[QuestOut])
 def get_quests(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[QuestOut]:
@@ -823,3 +910,39 @@ def equip_item(payload: EquipItemRequest, current_user: User = Depends(get_curre
     complete_quest_if_needed(db, current_user, "equip_item")
     unlock_items(db, current_user)
     return MessageResponse(message="프로필 아이템을 장착했습니다.")
+
+#여기 아래 추가함
+@app.get("/api/notifications", response_model=list[NotificationResponse])
+def get_user_notifications(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> list[NotificationResponse]:
+    """현재 로그인한 유저의 모든 알림을 최신순(내림차순)으로 가져옵니다."""
+    notifications = (
+        db.query(Notification)
+        .filter(Notification.user_id == current_user.id)
+        .order_by(Notification.created_at.desc())
+        .all()
+    )
+    return notifications
+
+
+@app.patch("/api/notifications/{notification_id}/read", response_model=MessageResponse)
+def mark_notification_as_read(
+    notification_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """특정 알림을 읽음(is_read = True) 처리합니다."""
+    notification = (
+        db.query(Notification)
+        .filter(Notification.id == notification_id, Notification.user_id == current_user.id)
+        .first()
+    )
+    
+    if not notification:
+        raise HTTPException(status_code=404, detail="알림을 찾을 수 없거나 접근 권한이 없습니다.")
+        
+    notification.is_read = True
+    db.commit()
+    return MessageResponse(message="알림을 성공적으로 읽음 처리했습니다.")

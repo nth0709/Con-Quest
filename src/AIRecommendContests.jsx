@@ -1,6 +1,6 @@
-import { useMemo } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAppData } from './context/AppDataProvider'
+import { useMemo, useEffect } from 'react'
 
 const AUTH_KEY = 'authUser'
 
@@ -22,6 +22,26 @@ export default function AIRecommendContests() {
   const { contests } = useAppData()
 
   const list = useMemo(() => contests.filter(isAiContest), [contests])
+
+  useEffect(() => {
+    if (user && list && list.length > 0) {
+      const firstContest = list[0];
+      
+      // 0.1초 뒤에 이벤트를 발생시켜 신호 유실을 방지합니다.
+      const timerId = setTimeout(() => {
+        console.log("📢 추천 페이지에서 알림 무전 발송 시도!");
+        const event = new CustomEvent("NEW_AI_RECOMMENDATION", {
+          detail: {
+            title: "✦ AI 맞춤 추천 공모전 업데이트!",
+            contestTitle: firstContest.title
+          }
+        });
+        window.dispatchEvent(event);
+      }, 100);
+
+      return () => clearTimeout(timerId);
+    }
+  }, [list, user]);
 
   if (!user) return <Navigate to="/" replace />
 
