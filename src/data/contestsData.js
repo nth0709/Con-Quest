@@ -14,12 +14,12 @@ function normalizeTags(row, sourceSite, category) {
 }
 
 export function normalizeContest(row, index = 0) {
-  const deadline = firstText(row.deadline, row.endDate, row.createdAt, '2099-12-31')
-  const startDate = firstText(row.startDate, row.createdAt, deadline)
+  const deadline = firstText(row.deadline, row.endDate, row.end_date, row.createdAt, row.created_at, '2099-12-31')
+  const startDate = firstText(row.startDate, row.start_date, row.createdAt, row.created_at, deadline)
   const organizer = firstText(row.organizer, '주최사 정보 미상')
   const sourceSite = firstText(row.sourceSite, row.source_site, '기타')
-  const officialLink = firstText(row.officialLink, row.originalLink, row.link, row.homepage)
-  const imageUrl = firstText(row.imageUrl, row.thumbnailUrl, row.poster, FALLBACK_POSTER)
+  const officialLink = firstText(row.officialLink, row.official_link, row.originalLink, row.original_link, row.link, row.homepage)
+  const imageUrl = firstText(row.imageUrl, row.image_url, row.thumbnailUrl, row.thumbnail_url, row.poster, FALLBACK_POSTER)
   const recruitmentPeriod = firstText(row.recruitmentPeriod, row.period, `마감일: ${deadline}`)
   const activityPeriod = firstText(row.activityPeriod)
   const recruitCount = firstText(row.recruitCount, row.recruitmentCount)
@@ -37,8 +37,8 @@ export function normalizeContest(row, index = 0) {
     createdAt: firstText(row.createdAt, startDate),
     deadline,
     startDate,
-    endDate: firstText(row.endDate, deadline),
-    resultDate: firstText(row.resultDate, deadline),
+    endDate: firstText(row.endDate, row.end_date, deadline),
+    resultDate: firstText(row.resultDate, row.result_date, deadline),
     poster: imageUrl,
     imageUrl,
     thumbnailUrl: firstText(row.thumbnailUrl, imageUrl),

@@ -1293,10 +1293,19 @@ export default function AIAnalysisPage() {
 
     if (hasApiBase()) {
       try {
-        const saved = await patchMe(next)
-        saveUser(saved)
+        const saved = await patchMe({
+          name: next.name,
+          major: next.major,
+          interests: next.categories.join(', '),
+          skills: next.skills.join(', '),
+          certificates: next.certifications.map((item) => item.name).filter(Boolean).join(', '),
+          awards: String(next.contestAwardCount ?? ''),
+          preferred_fields: next.mainActivityJobFields.join(', '),
+          desired_career: next.desiredRole || next.currentRole,
+        })
+        saveUser({ ...saved, ...next, points: saved.points })
         await showAlert({ message: '저장되었습니다.' })
-        window.dispatchEvent(new CustomEvent('conquest-ai-profile-draft', { detail: { incomplete: isAiProfileIncomplete(saved) } }))
+        window.dispatchEvent(new CustomEvent('conquest-ai-profile-draft', { detail: { incomplete: isAiProfileIncomplete(next) } }))
         return
       } catch (error) {
         console.warn('Failed to sync AI profile to backend, keeping local fallback.', error)

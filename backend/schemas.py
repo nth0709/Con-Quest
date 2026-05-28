@@ -26,6 +26,7 @@ class UserOut(BaseModel):
     email: str
     major: str
     interests: str
+    skills: str
     certificates: str
     awards: str
     preferred_fields: str
@@ -155,6 +156,7 @@ class MyPageUpdate(BaseModel):
     email: Optional[EmailStr] = None
     major: Optional[str] = None
     interests: Optional[str] = None
+    skills: Optional[str] = None
     certificates: Optional[str] = None
     awards: Optional[str] = None
     preferred_fields: Optional[str] = None

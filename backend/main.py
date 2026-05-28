@@ -73,14 +73,23 @@ def load_sample_payload() -> list[dict]:
 def normalize_contest_payload(contest: dict, fallback_source: Optional[str] = None) -> dict:
     title = str(contest.get("title") or contest.get("공모전이름") or "").strip()
     organizer = str(contest.get("organizer") or contest.get("주최사") or "").strip() or "정보 없음"
-    end_date_raw = contest.get("end_date") or contest.get("마감일")
-    original_link = str(contest.get("original_link") or contest.get("링크") or "").strip() or "정보 없음"
-    source_site = str(contest.get("source_site") or fallback_source or "기타").strip() or "기타"
+    start_date_raw = contest.get("start_date") or contest.get("startDate") or contest.get("createdAt")
+    end_date_raw = contest.get("end_date") or contest.get("endDate") or contest.get("deadline") or contest.get("마감일")
+    original_link = str(
+        contest.get("original_link")
+        or contest.get("originalLink")
+        or contest.get("officialLink")
+        or contest.get("link")
+        or contest.get("homepage")
+        or contest.get("링크")
+        or ""
+    ).strip() or "정보 없음"
+    source_site = str(contest.get("source_site") or contest.get("sourceSite") or fallback_source or "기타").strip() or "기타"
     return {
         "title": title,
         "organizer": organizer,
         "category": str(contest.get("category", "")).strip() or "공모전",
-        "start_date": str(contest.get("start_date", "")).strip() or None,
+        "start_date": str(start_date_raw).strip() if start_date_raw else None,
         "end_date": str(end_date_raw).strip() if end_date_raw else None,
         "source_site": source_site,
         "original_link": original_link,
