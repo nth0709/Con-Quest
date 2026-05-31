@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 from datetime import date, datetime
+import hashlib
 import json
 from pathlib import Path
 from typing import Optional
@@ -37,6 +38,7 @@ from schemas import (
     QuestOut,
     RecommendationItem,
     RecommendationRequest,
+    NotificationOut,
     UserLogin,
     UserOut,
     UserRegister,
@@ -46,7 +48,18 @@ from schemas import (
 APP_TITLE = "ConQuest API"
 DATA_DIR = Path(__file__).resolve().parent / "data"
 SAMPLE_PATH = DATA_DIR / "sample_contests.json"
+JSON_PATH = DATA_DIR / "contests.json"
 CSV_PATH = DATA_DIR / "contests.csv"
+
+IMAGE_FALLBACKS = [
+    "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=1200&q=80",
+]
+DEFAULT_IMAGE_TOKEN = "photo-1516321497487-e288fb19713f"
 
 SITE_COLORS = {
     "링커리어": "#4f46e5",
@@ -67,7 +80,76 @@ app.add_middleware(
 
 
 def load_sample_payload() -> list[dict]:
-    return json.loads(SAMPLE_PATH.read_text(encoding="utf-8"))
+    source_path = JSON_PATH if JSON_PATH.exists() else SAMPLE_PATH
+    return json.loads(source_path.read_text(encoding="utf-8"))
+
+
+_CONTEST_ASSET_CACHE: Optional[dict[tuple[str, str], dict]] = None
+_CONTEST_DB_SYNCED = False
+
+
+def stable_fallback_image(title: str, source_site: str = "") -> str:
+    seed = f"{title}|{source_site}".encode("utf-8", errors="ignore")
+    index = int(hashlib.sha1(seed).hexdigest(), 16) % len(IMAGE_FALLBACKS)
+    return IMAGE_FALLBACKS[index]
+
+
+def normalize_image_url(url: object, title: str, source_site: str = "") -> str:
+    text = str(url or "").strip()
+    if not text or DEFAULT_IMAGE_TOKEN in text:
+        return stable_fallback_image(title, source_site)
+    return text
+
+
+def load_contest_asset_map() -> dict[tuple[str, str], dict]:
+    global _CONTEST_ASSET_CACHE
+    if _CONTEST_ASSET_CACHE is not None:
+        return _CONTEST_ASSET_CACHE
+
+    path = DATA_DIR / "contests.json"
+    try:
+        rows = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        rows = []
+
+    cache: dict[tuple[str, str], dict] = {}
+    for row in rows if isinstance(rows, list) else []:
+        title = str(row.get("title") or row.get("contest_name") or "").strip()
+        deadline = str(row.get("endDate") or row.get("deadline") or row.get("end_date") or "").strip()
+        if title and deadline:
+            cache[(title, deadline)] = row
+
+    _CONTEST_ASSET_CACHE = cache
+    return cache
+
+
+def contest_asset_payload(contest: Contest) -> dict[str, str]:
+    deadline = contest.end_date.isoformat() if contest.end_date else ""
+    row = load_contest_asset_map().get((contest.title, deadline), {})
+    image_url = normalize_image_url(
+        row.get("imageUrl") or row.get("image_url") or row.get("thumbnailUrl") or row.get("poster"),
+        contest.title,
+        contest.source_site,
+    )
+    official_link = str(
+        row.get("officialLink")
+        or row.get("official_link")
+        or row.get("originalLink")
+        or row.get("original_link")
+        or row.get("link")
+        or row.get("homepage")
+        or contest.original_link
+        or ""
+    ).strip()
+    return {
+        "imageUrl": image_url,
+        "thumbnailUrl": image_url,
+        "poster": image_url,
+        "officialLink": official_link,
+        "homepage": official_link,
+        "sourceDetailUrl": str(row.get("sourceDetailUrl") or row.get("source_detail_url") or "").strip(),
+        "sourceSite": contest.source_site,
+    }
 
 
 def normalize_contest_payload(contest: dict, fallback_source: Optional[str] = None) -> dict:
@@ -218,6 +300,81 @@ def load_sample_contests(db: Session, force: bool = False) -> int:
     return inserted
 
 
+def sync_contests_from_json(db: Session) -> None:
+    if not JSON_PATH.exists():
+        return
+    try:
+        payload = load_sample_payload()
+    except Exception:
+        return
+
+    normalized_rows = []
+    for raw in payload:
+        row = normalize_contest_payload(raw)
+        if row["title"] and is_valid_contest_title(row["title"]):
+            normalized_rows.append(row)
+
+    if not normalized_rows:
+        return
+
+    def key_for(row: dict) -> tuple[str, str, str]:
+        return (
+            row["title"],
+            row["source_site"],
+            parse_date_or_none(row["end_date"]).isoformat() if parse_date_or_none(row["end_date"]) else "",
+        )
+
+    desired_keys = {key_for(row) for row in normalized_rows}
+    existing_rows = db.query(Contest).all()
+    existing_by_key = {
+        (
+            contest.title,
+            contest.source_site,
+            contest.end_date.isoformat() if contest.end_date else "",
+        ): contest
+        for contest in existing_rows
+    }
+
+    changed = False
+    for key, contest in list(existing_by_key.items()):
+        if key not in desired_keys:
+            db.query(Scrap).filter(Scrap.contest_id == contest.id).delete()
+            db.delete(contest)
+            changed = True
+
+    for row in normalized_rows:
+        key = key_for(row)
+        contest = existing_by_key.get(key)
+        if contest:
+            contest.organizer = row["organizer"]
+            contest.category = row["category"]
+            contest.start_date = parse_date_or_none(row["start_date"])
+            contest.end_date = parse_date_or_none(row["end_date"])
+            contest.original_link = row["original_link"]
+            contest.description = row["description"]
+            contest.required_skills = row["required_skills"]
+            changed = True
+        else:
+            db.add(
+                Contest(
+                    title=row["title"],
+                    organizer=row["organizer"],
+                    category=row["category"],
+                    start_date=parse_date_or_none(row["start_date"]),
+                    end_date=parse_date_or_none(row["end_date"]),
+                    source_site=row["source_site"],
+                    original_link=row["original_link"],
+                    description=row["description"],
+                    required_skills=row["required_skills"],
+                )
+            )
+            changed = True
+
+    if changed:
+        db.commit()
+        export_db_contests_to_csv(db)
+
+
 def ensure_user_quest_rows(db: Session, user: User) -> None:
     quest_ids = {row.quest_id for row in db.query(UserQuest).filter(UserQuest.user_id == user.id).all()}
     for quest in db.query(Quest).all():
@@ -255,6 +412,7 @@ def unlock_items(db: Session, user: User) -> None:
 
 
 def contest_to_schema(contest: Contest, scrapped_ids: set[int]) -> ContestOut:
+    assets = contest_asset_payload(contest)
     return ContestOut(
         id=contest.id,
         title=contest.title,
@@ -263,7 +421,14 @@ def contest_to_schema(contest: Contest, scrapped_ids: set[int]) -> ContestOut:
         start_date=contest.start_date,
         end_date=contest.end_date,
         source_site=contest.source_site,
-        original_link=contest.original_link,
+        original_link=assets["officialLink"] or contest.original_link,
+        imageUrl=assets["imageUrl"],
+        thumbnailUrl=assets["thumbnailUrl"],
+        poster=assets["poster"],
+        officialLink=assets["officialLink"],
+        homepage=assets["homepage"],
+        sourceDetailUrl=assets["sourceDetailUrl"],
+        sourceSite=assets["sourceSite"],
         description=contest.description,
         required_skills=contest.required_skills,
         is_scrapped=contest.id in scrapped_ids,
@@ -292,9 +457,13 @@ def build_calendar_events(contests: list[Contest]) -> list[CalendarEvent]:
 
 
 def ensure_contests_exist(db: Session) -> None:
+    global _CONTEST_DB_SYNCED
     if db.query(Contest).count() == 0:
         load_sample_contests(db, force=True)
-    elif not CSV_PATH.exists():
+    if not _CONTEST_DB_SYNCED:
+        sync_contests_from_json(db)
+        _CONTEST_DB_SYNCED = True
+    if not CSV_PATH.exists():
         export_db_contests_to_csv(db)
 
 
@@ -659,31 +828,90 @@ def _build_recommendation_response(
         return []
     recommendation_payload = [
         {
-            "id": contest.id,
-            "title": contest.title,
-            "organizer": contest.organizer,
-            "category": contest.category,
-            "start_date": contest.start_date,
-            "end_date": contest.end_date,
-            "source_site": contest.source_site,
-            "original_link": contest.original_link,
-            "description": contest.description,
-            "required_skills": contest.required_skills,
+            **contest_to_schema(contest, set()).model_dump(),
         }
         for contest in contests
     ]
     results = calculate_recommendation(payload.model_dump(), recommendation_payload)[:6]
     complete_quest_if_needed(db, current_user, "view_recommendation")
     scrapped_ids = {row.contest_id for row in db.query(Scrap).filter(Scrap.user_id == current_user.id).all()}
-    return [
-        RecommendationItem(
-            contest=ContestOut(**item["contest"], is_scrapped=item["contest"]["id"] in scrapped_ids),
-            score=item["score"],
-            reason=item["reason"],
-            matched_points=item["matched_points"],
+    response: list[RecommendationItem] = []
+    for item in results:
+        contest_payload = {**item["contest"], "is_scrapped": item["contest"]["id"] in scrapped_ids}
+        response.append(
+            RecommendationItem(
+                contest=ContestOut(**contest_payload),
+                score=item["score"],
+                reason=item["reason"],
+                matched_points=item["matched_points"],
+            )
         )
-        for item in results
-    ]
+    return response
+
+
+def notification_profile_from_user(user: User) -> RecommendationRequest:
+    return RecommendationRequest(
+        name=user.name or "",
+        interests=user.interests or "",
+        major=user.major or "",
+        skills=user.skills or "",
+        certificates=user.certificates or "",
+        awards=user.awards or "",
+        desired_career=user.desired_career or "",
+        preferred_fields=user.preferred_fields or "",
+    )
+
+
+def build_personalized_notifications(current_user: User, db: Session) -> list[NotificationOut]:
+    ensure_contests_exist(db)
+    contests = [contest for contest in db.query(Contest).all() if is_valid_contest_title(contest.title)]
+    if not contests:
+        return []
+
+    payload = [contest_to_schema(contest, set()).model_dump() for contest in contests]
+    results = calculate_recommendation(notification_profile_from_user(current_user).model_dump(), payload)
+    notifications: list[NotificationOut] = []
+
+    for item in results[:12]:
+        contest = item["contest"]
+        score = int(item.get("score", 0))
+        if score < 12:
+            continue
+        deadline = contest.get("end_date")
+        notifications.append(
+            NotificationOut(
+                id=f"{current_user.id}-{contest['id']}",
+                contest_id=int(contest["id"]),
+                title="AI 맞춤 공모전 알림",
+                message=f"{contest['title']}이 회원님의 관심 분야와 잘 맞아요.",
+                deadline=deadline,
+                score=score,
+                is_read=False,
+                created_at=datetime.utcnow(),
+            )
+        )
+
+    return notifications
+
+
+@app.get("/api/notifications", response_model=list[NotificationOut])
+@app.get("/api/v1/notifications", response_model=list[NotificationOut])
+def get_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[NotificationOut]:
+    return build_personalized_notifications(current_user, db)
+
+
+@app.post("/api/notifications/generate", response_model=list[NotificationOut])
+@app.post("/api/v1/notifications/generate", response_model=list[NotificationOut])
+def generate_notifications(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[NotificationOut]:
+    return build_personalized_notifications(current_user, db)
+
+
+@app.patch("/api/notifications/{notification_id}/read", response_model=MessageResponse)
+@app.patch("/api/v1/notifications/{notification_id}/read", response_model=MessageResponse)
+def mark_notification_read(notification_id: str, current_user: User = Depends(get_current_user)) -> MessageResponse:
+    if not notification_id.startswith(f"{current_user.id}-"):
+        raise HTTPException(status_code=404, detail="알림을 찾을 수 없습니다.")
+    return MessageResponse(message="알림을 읽음 처리했습니다.")
 
 
 @app.post("/api/v1/recommendations", response_model=list[RecommendationItem])

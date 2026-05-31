@@ -55,6 +55,13 @@ class ContestOut(BaseModel):
     end_date: Optional[date]
     source_site: str
     original_link: str
+    imageUrl: str = ""
+    thumbnailUrl: str = ""
+    poster: str = ""
+    officialLink: str = ""
+    homepage: str = ""
+    sourceDetailUrl: str = ""
+    sourceSite: str = ""
     description: str
     required_skills: str
     is_scrapped: bool = False
@@ -106,6 +113,17 @@ class RecommendationItem(BaseModel):
     score: int
     reason: str
     matched_points: List[str]
+
+
+class NotificationOut(BaseModel):
+    id: str
+    contest_id: int
+    title: str
+    message: str
+    deadline: Optional[date] = None
+    score: int = 0
+    is_read: bool = False
+    created_at: datetime
 
 
 class QuestOut(BaseModel):

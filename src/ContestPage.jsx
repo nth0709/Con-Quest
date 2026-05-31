@@ -4,6 +4,9 @@ import { useAppData } from './context/AppDataProvider'
 import { useAppDialog } from './context/AppDialogProvider'
 
 const BRIGHT_BLUE = '#3B6CFF'
+const SAFE_IMAGE_FALLBACK =
+  'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80'
+const SHORT_LINK_HOSTS = ['bit.ly', 'vo.la', 'forms.gle', 'docs.google.com', 'forms.google.com', 'url.kr', 'me2.kr', 'naver.me']
 
 function toDateOnly(dateString) {
   const [year, month, day] = dateString.split('-').map(Number)
@@ -18,6 +21,17 @@ function calculateDday(deadline) {
 
 function textOrEmpty(value) {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function isShortOrFormLink(link) {
+  const value = String(link ?? '').toLowerCase()
+  return SHORT_LINK_HOSTS.some((host) => value.includes(host)) || value.includes('/forms/') || value.includes('google.com/forms')
+}
+
+function getBestOfficialLink(contest) {
+  const official = contest.officialLink || contest.homepage || contest.originalLink || contest.link
+  if (official && !isShortOrFormLink(official)) return official
+  return contest.sourceDetailUrl || official
 }
 
 function buildCardMeta(contest) {
@@ -155,7 +169,7 @@ export default function ContestPage() {
 
   const openOfficialLink = (contest, event) => {
     event?.stopPropagation?.()
-    const link = contest.officialLink || contest.homepage || contest.originalLink || contest.link
+    const link = getBestOfficialLink(contest)
     if (!link) return
     window.open(link, '_blank', 'noopener,noreferrer')
   }
@@ -188,7 +202,14 @@ export default function ContestPage() {
 
           <div className="min-h-0 flex-1 overflow-y-auto pb-[104px]">
             <section className="overflow-hidden rounded-3xl border border-zinc-200 bg-zinc-50">
-              <img src={imageUrl} alt={selectedContest.title} className="h-72 w-full object-cover" />
+              <img
+                src={imageUrl || SAFE_IMAGE_FALLBACK}
+                alt={selectedContest.title}
+                className="h-72 w-full object-cover"
+                onError={(event) => {
+                  event.currentTarget.src = SAFE_IMAGE_FALLBACK
+                }}
+              />
             </section>
 
             <section className="mt-3 rounded-3xl border border-zinc-200 p-4">
@@ -338,9 +359,12 @@ export default function ContestPage() {
                 >
                   <div className="flex gap-3 p-3">
                     <img
-                      src={imageUrl}
+                      src={imageUrl || SAFE_IMAGE_FALLBACK}
                       alt={contest.title}
                       className="h-28 w-24 shrink-0 rounded-2xl object-cover"
+                      onError={(event) => {
+                        event.currentTarget.src = SAFE_IMAGE_FALLBACK
+                      }}
                     />
 
                     <div className="min-w-0 flex-1">

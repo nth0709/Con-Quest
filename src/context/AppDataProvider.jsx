@@ -160,7 +160,7 @@ export function AppDataProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [apiEnabled, hydrateRemoteContests, hydrateRemotePosts, rev])
+  }, [apiEnabled, hydrateRemoteContests, hydrateRemotePosts])
 
   const contests = useMemo(() => {
     if (remoteContests) return remoteContests

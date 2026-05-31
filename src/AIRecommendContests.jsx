@@ -4,6 +4,8 @@ import { fetchRecommendations } from './api/recommendations'
 import { useAppData } from './context/AppDataProvider'
 
 const AUTH_KEY = 'authUser'
+const SAFE_IMAGE_FALLBACK =
+  'https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=1200&q=80'
 
 function getAuthUser() {
   try {
@@ -130,7 +132,14 @@ export default function AIRecommendContests() {
               <div key={c.id} className="rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
                 <div className="flex gap-3">
                   <Link to={`/contests/${c.id}`} className="shrink-0">
-                    <img src={c.poster} alt="" className="h-20 w-20 rounded-lg object-cover" />
+                    <img
+                      src={c.poster || c.imageUrl || SAFE_IMAGE_FALLBACK}
+                      alt=""
+                      className="h-20 w-20 rounded-lg object-cover"
+                      onError={(event) => {
+                        event.currentTarget.src = SAFE_IMAGE_FALLBACK
+                      }}
+                    />
                   </Link>
                   <div className="min-w-0 flex-1">
                     <Link to={`/contests/${c.id}`} className="line-clamp-2 font-bold text-zinc-900">
@@ -152,4 +161,3 @@ export default function AIRecommendContests() {
     </div>
   )
 }
-

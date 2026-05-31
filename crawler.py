@@ -45,6 +45,49 @@ AGGREGATOR_DOMAINS = {
     "www.thinkcontest.com",
 }
 INVALID_LINK_KEYWORDS = ("facebook.com/wevity/app",)
+SOCIAL_LINK_DOMAINS = {
+    "facebook.com",
+    "instagram.com",
+    "youtube.com",
+    "youtu.be",
+    "twitter.com",
+    "x.com",
+    "pf.kakao.com",
+    "blog.naver.com/thinkgood",
+}
+SHORTENER_OR_FORM_DOMAINS = {
+    "bit.ly",
+    "forms.gle",
+    "docs.google.com",
+    "forms.google.com",
+    "vo.la",
+    "url.kr",
+    "me2.kr",
+    "naver.me",
+}
+BAD_IMAGE_KEYWORDS = (
+    "noimgs",
+    "noimg",
+    "logo",
+    "banner",
+    "icon",
+    "btn_",
+    "sns",
+    "facebook",
+    "twitter",
+    "kakao",
+    "bg_",
+    "app-store",
+    "play-store",
+)
+GOOD_IMAGE_KEYWORDS = (
+    "/upload/contest/",
+    "api.linkareer.com/attachments",
+    "media-cdn.linkareer.com",
+    "contest_poster",
+    "poster/image",
+    "contestbanner",
+)
 
 LINKAREER_MAX_PAGES = int(os.getenv("LINKAREER_MAX_PAGES", "4"))
 WEVITY_MAX_PAGES = int(os.getenv("WEVITY_MAX_PAGES", "10"))
@@ -160,9 +203,21 @@ def is_external_link(url: str) -> bool:
         return False
     if parsed.netloc.lower() in AGGREGATOR_DOMAINS:
         return False
+    normalized_url = url.lower().replace("www.", "")
+    if any(domain in normalized_url for domain in SOCIAL_LINK_DOMAINS):
+        return False
     if any(token in url.lower() for token in INVALID_LINK_KEYWORDS):
         return False
     return True
+
+
+def is_shortener_or_form_link(url: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower().replace("www.", "")
+    if host in SHORTENER_OR_FORM_DOMAINS:
+        return True
+    lowered = url.lower()
+    return any(token in lowered for token in ("google.com/forms", "/forms/", "form.", "apply", "entry"))
 
 
 def normalize_absolute_url(url: str, base_url: str) -> str:
@@ -170,8 +225,39 @@ def normalize_absolute_url(url: str, base_url: str) -> str:
     return clean_text(absolute)
 
 
-def pick_best_image(soup: BeautifulSoup, detail_url: str) -> str:
-    candidates = []
+def normalize_image_candidate(raw_url: str, base_url: str) -> str:
+    raw_url = (raw_url or "").strip()
+    if not raw_url or raw_url.startswith("data:"):
+        return ""
+    if "/_next/image" in raw_url:
+        raw_url = parse_qs(urlparse(raw_url).query).get("url", [raw_url])[0]
+    return normalize_absolute_url(raw_url, base_url)
+
+
+def score_image_candidate(url: str, alt: str, title: str) -> int:
+    lowered = url.lower()
+    alt_lowered = alt.lower()
+    if not url.startswith("http"):
+        return -999
+    if any(keyword in lowered for keyword in BAD_IMAGE_KEYWORDS):
+        return -120
+    score = 0
+    if any(keyword in lowered for keyword in GOOD_IMAGE_KEYWORDS):
+        score += 90
+    if "og:image" in alt_lowered:
+        score += 20
+    title_words = [word for word in re.split(r"\s+", title.lower()) if len(word) >= 2]
+    if title_words and any(word in alt_lowered for word in title_words[:5]):
+        score += 35
+    if re.search(r"\.(jpg|jpeg|png|webp)(\?|$)", lowered):
+        score += 10
+    if "thumb" in lowered:
+        score += 3
+    return score
+
+
+def pick_best_image(soup: BeautifulSoup, detail_url: str, title: str = "") -> str:
+    candidates: list[tuple[int, str]] = []
     for selector in (
         "meta[property='og:image']",
         "meta[name='twitter:image']",
@@ -185,15 +271,47 @@ def pick_best_image(soup: BeautifulSoup, detail_url: str) -> str:
         if not node:
             continue
         raw_url = node.get("content") if node.name == "meta" else node.get("src")
-        url = normalize_absolute_url(raw_url or "", detail_url)
+        url = normalize_image_candidate(raw_url or "", detail_url)
         if url.startswith("http"):
-            candidates.append(url)
+            alt = "og:image" if node.name == "meta" else clean_text(node.get("alt") or node.get("title") or "")
+            candidates.append((score_image_candidate(url, alt, title), url))
 
-    return candidates[0] if candidates else DEFAULT_POSTER
+    candidates = [item for item in candidates if item[0] > -50]
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return candidates[0][1] if candidates else DEFAULT_POSTER
+
+
+def extract_homepage_candidates_from_text(page_text: str) -> list[str]:
+    candidates: list[str] = []
+    pattern = r"(https?://[^\s<>'\"()]+|www\.[^\s<>'\"()]+|[0-9A-Za-z가-힣.-]+\.(?:com|co\.kr|or\.kr|org|net|kr)[^\s<>'\"()]*)"
+    for match in re.finditer(pattern, page_text):
+        raw = match.group(1).rstrip(").,]")
+        if not raw.startswith("http"):
+            raw = f"https://{raw}"
+        if is_external_link(raw):
+            candidates.append(raw)
+    return list(dict.fromkeys(candidates))
 
 
 def looks_like_homepage_text(text: str) -> bool:
     return any(keyword in text for keyword in ("공식", "홈페이지", "접수", "지원", "신청", "상세", "바로가기"))
+
+
+def looks_like_homepage_text(text: str) -> bool:
+    return any(
+        keyword in text
+        for keyword in (
+            "공식",
+            "홈페이지",
+            "공모전 홈페이지",
+            "바로가기",
+            "상세",
+            "怨듭떇",
+            "?덊럹?댁?",
+            "?곸꽭",
+            "諛붾줈媛湲?",
+        )
+    )
 
 
 def pick_official_link(soup: BeautifulSoup, detail_url: str) -> str:
@@ -206,13 +324,26 @@ def pick_official_link(soup: BeautifulSoup, detail_url: str) -> str:
         score = 0
         if is_external_link(href):
             score += 8
+        if is_shortener_or_form_link(href):
+            score -= 8
         if looks_like_homepage_text(text):
             score += 4
-        if any(keyword in href.lower() for keyword in ("apply", "contest", "event", "entry", "form")):
+        if any(keyword in href.lower() for keyword in ("contest", "event")):
             score += 2
+        if any(keyword in text for keyword in ("신청", "지원", "접수", "Apply", "Entry")):
+            score -= 4
+        scored.append((score, href))
+
+    for href in extract_homepage_candidates_from_text(soup.get_text("\n", strip=True)):
+        score = 12
+        if is_shortener_or_form_link(href):
+            score -= 8
         scored.append((score, href))
 
     scored.sort(key=lambda item: item[0], reverse=True)
+    for _, href in scored:
+        if is_external_link(href) and not is_shortener_or_form_link(href):
+            return href
     for _, href in scored:
         if is_external_link(href):
             return href
@@ -316,8 +447,11 @@ def extract_period_pair(page_text: str, label: str) -> str:
 
 
 def extract_homepage_from_text(page_text: str) -> str:
-    match = re.search(r"(https?://[^\s]+)", page_text)
-    return clean_text(match.group(1).rstrip(").,")) if match else ""
+    for candidate in extract_homepage_candidates_from_text(page_text):
+        if not is_shortener_or_form_link(candidate):
+            return candidate
+    candidates = extract_homepage_candidates_from_text(page_text)
+    return candidates[0] if candidates else ""
 
 
 def extract_detail_fields(soup: BeautifulSoup, detail_url: str, title: str = "") -> dict[str, str]:
@@ -359,8 +493,9 @@ def extract_detail_fields(soup: BeautifulSoup, detail_url: str, title: str = "")
         "deadline": extract_deadline(focused_text) or extract_deadline(page_text),
         "official_link": homepage or detail_url,
         "homepage": homepage or detail_url,
-        "image_url": pick_best_image(soup, detail_url),
-        "thumbnail_url": pick_best_image(soup, detail_url),
+        "source_detail_url": detail_url,
+        "image_url": pick_best_image(soup, detail_url, title),
+        "thumbnail_url": pick_best_image(soup, detail_url, title),
         "recruitment_period": recruitment_period,
         "activity_period": activity_period,
         "recruit_count": recruit_count,
@@ -402,6 +537,7 @@ def normalize_row(
         "thumbnail_url": clean_text(extra_fields.get("thumbnail_url")) or DEFAULT_POSTER,
         "official_link": clean_text(extra_fields.get("official_link")) or link,
         "homepage": clean_text(extra_fields.get("homepage")) or link,
+        "source_detail_url": clean_text(extra_fields.get("source_detail_url")) or link,
         "recruitment_period": clean_text(extra_fields.get("recruitment_period")),
         "activity_period": clean_text(extra_fields.get("activity_period")),
         "recruit_count": clean_text(extra_fields.get("recruit_count")),
@@ -513,6 +649,27 @@ def crawl_wevity() -> list[dict[str, str]]:
                     title = extract_title(soup)
                     detail_fields = extract_detail_fields(soup, detail_url, title)
                     organizer = detail_fields["organizer"] or "주최사 정보 미상"
+                    try:
+                        detail_html = fetch_html(session, detail_url)
+                        detail_soup = BeautifulSoup(detail_html, "html.parser")
+                        parsed_fields = extract_detail_fields(detail_soup, detail_url, title)
+                        detail_fields.update({key: value for key, value in parsed_fields.items() if value})
+                        organizer = detail_fields.get("organizer") or organizer
+                        deadline = detail_fields.get("deadline") or deadline
+                    except Exception:
+                        pass
+
+                    if detail_fields.get("needs_detail_refresh"):
+                        try:
+                            detail_html = fetch_html(session, detail_url)
+                            detail_soup = BeautifulSoup(detail_html, "html.parser")
+                            parsed_fields = extract_detail_fields(detail_soup, detail_url, title)
+                            detail_fields.update({key: value for key, value in parsed_fields.items() if value})
+                            organizer = detail_fields.get("organizer") or organizer
+                            deadline = detail_fields.get("deadline") or deadline
+                        except Exception:
+                            pass
+
                     row = normalize_row(
                         contest_name=title,
                         organizer=organizer,
@@ -578,6 +735,8 @@ def crawl_wevity_fast() -> list[dict[str, str]]:
                         "image_url": DEFAULT_POSTER,
                         "thumbnail_url": DEFAULT_POSTER,
                         "category": category,
+                        "needs_detail_refresh": "1",
+                        "detail_url_for_refresh": detail_url,
                         "description": f"{organizer}에서 진행하는 공모전입니다. 자세한 내용은 위비티 원문을 확인해 주세요.",
                     }
                     row = normalize_row(
@@ -749,6 +908,7 @@ def row_to_frontend_payload(index: int, row: dict[str, str]) -> dict[str, str | 
         "originalLink": official_link,
         "officialLink": official_link,
         "homepage": row.get("homepage") or official_link,
+        "sourceDetailUrl": row.get("source_detail_url") or official_link,
         "recruitmentPeriod": row.get("recruitment_period", ""),
         "activityPeriod": row.get("activity_period", ""),
         "recruitmentCount": recruit_count,
@@ -825,6 +985,7 @@ def load_existing_source_rows() -> dict[str, list[dict[str, str]]]:
                 "thumbnail_url": clean_text(str(row.get("thumbnailUrl") or row.get("imageUrl") or row.get("poster") or DEFAULT_POSTER)),
                 "official_link": clean_text(str(row.get("officialLink") or row.get("originalLink") or row.get("link") or "")),
                 "homepage": clean_text(str(row.get("homepage") or row.get("officialLink") or row.get("link") or "")),
+                "source_detail_url": clean_text(str(row.get("sourceDetailUrl") or row.get("source_detail_url") or "")),
                 "recruitment_period": clean_text(str(row.get("recruitmentPeriod") or row.get("period") or "")),
                 "activity_period": clean_text(str(row.get("activityPeriod") or "")),
                 "recruit_count": clean_text(str(row.get("recruitCount") or row.get("recruitmentCount") or "")),
@@ -868,7 +1029,7 @@ def main() -> None:
     existing_rows = load_existing_source_rows()
     site_rows = {
         SOURCE_LINKAREER: crawl_with_fallback(SOURCE_LINKAREER, crawl_linkareer, existing_rows[SOURCE_LINKAREER]),
-        SOURCE_WEVITY: crawl_with_fallback(SOURCE_WEVITY, crawl_wevity_fast, existing_rows[SOURCE_WEVITY]),
+        SOURCE_WEVITY: crawl_with_fallback(SOURCE_WEVITY, crawl_wevity, existing_rows[SOURCE_WEVITY]),
         SOURCE_THINKGOOD: crawl_with_fallback(SOURCE_THINKGOOD, crawl_thinkgood, existing_rows[SOURCE_THINKGOOD]),
     }
 

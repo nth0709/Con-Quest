@@ -18,6 +18,7 @@ import ConQuestPage from './ConQuestPage'
 import AIRecommendPage from './AIRecommendPage'
 import DummyPage from './DummyPage'
 import BottomNavigation from './components/BottomNavigation'
+import PersonalizedNotificationWidget from './components/PersonalizedNotificationWidget'
 import { loginRequest, signupRequest } from './api/auth'
 import { clearAccessToken, hasApiBase, saveAccessToken } from './api/client'
 import { saveTotalXp } from './conquest/xpTier'
@@ -1585,6 +1586,7 @@ function ShellLayout() {
           </PageTransition>
         </div>
         <BottomNavigation />
+        <PersonalizedNotificationWidget />
 
         <div
           className={`absolute inset-0 z-[60] bg-zinc-900/40 backdrop-blur-[2px] transition-opacity duration-300 ease-out ${
